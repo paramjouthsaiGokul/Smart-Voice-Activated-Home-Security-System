@@ -1,0 +1,237 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "ThingSpeak.h"
+#include <SoftwareSerial.h>
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+String command;
+/Put your SSID & Password/
+const char* ssid = "project"; // Enter SSID here
+const char* password = "123456789"; //Enter Password here
+WiFiClient client;
+ESP8266WebServer server(80);
+#define Buz D4
+uint8_t LED1pin = D7;
+bool LED1status = LOW;
+uint8_t LED2pin = D6;
+bool LED2status = LOW;
+void setup() {
+ Serial.begin(115200);
+ delay(100);
+ pinMode(LED1pin, OUTPUT);
+ pinMode(LED2pin, OUTPUT);
+ pinMode(Buz, OUTPUT);
+ digitalWrite(LED1pin, HIGH);
+ digitalWrite(LED2pin, LOW);
+ digitalWrite(Buz, LOW);
+ delay(200);
+ if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3D for 128x64
+ Serial.println(F("SSD1306 allocation failed"));
+ for (;;)
+ ;
+ }
+ delay(1000);
+ display.clearDisplay();
+ display.setTextSize(1);
+ display.setTextColor(WHITE);
+ display.setCursor(0, 0);
+ display.println("SMART VOICE ACTIVATED HOME SECURITY SYSTEM");
+ display.display();
+ Serial.println("Connecting to ");
+ Serial.println(ssid);
+ display.setCursor(0, 30); // Start at top-left corner
+ display.print(("Attempt to connect"));
+ display.display();
+ delay(1000);
+ // Connect or reconnect to WiFi
+ if (WiFi.status() != WL_CONNECTED) {
+ Serial.println("Attempting to connect");
+ delay(1000);
+ while (WiFi.status() != WL_CONNECTED) {
+ WiFi.begin(ssid, password);
+ delay(5000);
+ }
+ }
+ display.setCursor(0, 40); // Start at top-left corner
+ display.print(("WiFi connected..!"));
+ Serial.println("WiFi connected..!");
+ display.display();
+ delay(1000);
+ display.setCursor(0, 50); // Start at top-left corner
+ display.setTextColor(WHITE, BLACK);
+ display.print(("IP: "));
+ display.print(WiFi.localIP());
+ Serial.print("Got IP: ");
+ Serial.println(WiFi.localIP());
+ display.display();
+ delay(2000);
+ WiFi.mode(WIFI_STA);
+ ThingSpeak.begin(client);
+ delay(1000);
+ server.on("/", handle_OnConnect);
+  server.on("/led1on", handle_led1on);
+ server.on("/led1off", handle_led1off);
+ server.on("/led2on", handle_led2on);
+ server.on("/led2off", handle_led2off);
+ server.onNotFound(handle_NotFound);
+ server.begin();
+ Serial.println("HTTP server started");
+}
+char x, y;
+void loop() {
+ display.clearDisplay();
+ delay(500);
+ server.handleClient();
+ if (LED1status) {
+ digitalWrite(LED1pin, HIGH);
+ display.setCursor(0, 10);
+ display.println("Load1 is ON");
+ display.display();
+ delay(1000);
+ } else {
+ digitalWrite(LED1pin, LOW);
+ display.setCursor(0, 10);
+ display.println("Load1 is OFF");
+ display.display();
+ delay(1000);
+ }
+ if (LED2status) {
+ digitalWrite(LED2pin, LOW);
+ display.setCursor(0, 30);
+ display.println("Load2 is ON");
+ display.display();
+ delay(1000);
+ } else {
+ digitalWrite(LED2pin, HIGH);
+ display.setCursor(0, 30);
+ display.println("Load2 is OFF");
+ display.display();
+ delay(1000);
+ }
+ delay(1000);
+ while (Serial.available()) {
+ command = "";
+  command = Serial.readString();
+ display.clearDisplay();
+ display.setTextSize(1);
+ display.setTextColor(WHITE);
+ display.setCursor(10, 0);
+ display.println("Instruction");
+ display.println(command);
+ display.display();
+ delay(2000);
+ if (command == "*bulb on#") {
+ display.setTextSize(1);
+ display.setTextColor(WHITE);
+ display.setCursor(0, 20);
+ display.println("BULB ON");
+ display.display();
+ digitalWrite(LED1pin, LOW);
+ // digitalWrite(mot2, LOW);
+ delay(1500);
+ } else if (command == "*fan on#") {
+ y = 1;
+ display.setTextSize(1);
+ display.setTextColor(WHITE);
+ display.setCursor(0, 20);
+ display.println("FAN ON");
+ display.display();
+ // digitalWrite(mot1, HIGH);
+ digitalWrite(LED2pin, HIGH);
+ delay(1500);
+ } else if (command == "*fan off#") {
+ y = 0;
+ display.setTextSize(1);
+ display.setTextColor(WHITE);
+ display.setCursor(0, 20);
+ display.println("FAN OFF");
+ display.display();
+ digitalWrite(LED2pin, LOW);
+ delay(1500);
+ } else if (command == "*bulb off#") {
+ x = 0;
+ display.setTextSize(1);
+ display.setTextColor(WHITE);
+ display.setCursor(0, 20);
+ display.println("BULB OFF");
+ display.display()
+ digitalWrite(LED1pin, HIGH);
+ delay(1500);
+ }
+ command = "";
+ delay(1000);
+ }
+}
+void handle_OnConnect() {
+ LED1status = LOW;
+ LED2status = LOW;
+ Serial.println("GPIO7 Status: OFF | GPIO6 Status: OFF");
+ server.send(200, "text/html", SendHTML(LED1status, LED2status));
+}
+void handle_led1on() {
+ LED1status = HIGH;
+ Serial.println("GPIO7 Status: ON");
+ server.send(200, "text/html", SendHTML(true, LED2status));
+}
+void handle_led1off() {
+ LED1status = LOW;
+ Serial.println("GPIO7 Status: OFF");
+ server.send(200, "text/html", SendHTML(false, LED2status));
+}
+void handle_led2on() {
+ LED2status = HIGH;
+ Serial.println("GPIO6 Status: ON");
+ server.send(200, "text/html", SendHTML(LED1status, true));
+}
+void handle_led2off() {
+ LED2status = LOW;
+ Serial.println("GPIO6 Status: OFF");
+ server.send(200, "text/html", SendHTML(LED1status, false));
+}
+void handle_NotFound() {
+ server.send(404, "text/plain", "Not found");
+}
+String SendHTML(uint8_t led1stat, uint8_t led2stat) {
+ String ptr = "<!DOCTYPE html> <html>\n";
+  ptr += "<head><meta name=\"viewport\" content=\"width=device-width, initialscale=1.0, user-scalable=no\">\n";
+ ptr += "<title>LED Control</title>\n";
+ ptr += "<style>html { font-family: Helvetica; display: inline-block; margin: 0px auto;
+text-align: center;}\n";
+ ptr += "body{margin-top: 50px;} h1 {color: #444444;margin: 50px auto 30px;} h3
+{color: #444444;margin-bottom: 50px;}\n";
+ ptr += ".button {display: block;width: 80px;background-color: #1abc9c;border:
+none;color: white;padding: 13px 30px;text-decoration: none;font-size: 25px;margin: 0px
+auto 35px;cursor: pointer;border-radius: 4px;}\n";
+ ptr += ".button-on {background-color: #1abc9c;}\n";
+ ptr += ".button-on:active {background-color: #16a085;}\n";
+ ptr += ".button-off {background-color: #34495e;}\n";
+ ptr += ".button-off:active {background-color: #2c3e50;}\n";
+ ptr += "p {font-size: 14px;color: #888;margin-bottom: 10px;}\n";
+ ptr += "</style>\n";
+ ptr += "</head>\n";
+ ptr += "<body>\n";
+ ptr += "<h1>ESP8266 Web Server</h1>\n";
+ ptr += "<h3>Using Station(STA) Mode</h3>\n";
+ if (led1stat) {
+ ptr += "<p>FAN Status: ON</p><a class=\"button button-off\"
+href=\"/led1off\">OFF</a>\n";
+ } else {
+ ptr += "<p>FAN Status: OFF</p><a class=\"button button-on\"
+href=\"/led1on\">ON</a>\n";
+ }
+ if (led2stat) {
+ ptr += "<p>LED Status: ON</p><a class=\"button button-off\"
+href=\"/led2off\">OFF</a>\n";
+ } else {
+ ptr += "<p>LED Status: OFF</p><a class=\"button button-on\"
+href=\"/led2on\">ON</a>\n";
+ }
+ ptr += "</body>\n";
+ ptr += "</html>\n";
+ return ptr;
+}
