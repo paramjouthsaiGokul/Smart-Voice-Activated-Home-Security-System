@@ -8,7 +8,7 @@ An IoT-based voice-activated home automation and security system using NodeMCU E
 - LDR Sensor
 - Buzzer
 - OLED Display
-- WiFi (for mobile alert)
+- WiFi 
 -  Voice Input
 
 ## 💡 Features
